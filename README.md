@@ -5,6 +5,13 @@ main brain**. AI (Groq, free) is only a minority supplement — used occasionall
 human "emotion" flavor, or as a fallback when nothing in Mongo matches. **No chat
 history or per-user memory is stored** — every message is handled fresh on its own.
 
+## 🚀 Quick Deploy to Heroku
+
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/anuragy89/vick2.git)
+
+
+
+
 ## How replies are chosen (in order)
 1. **Moderation** — flood/spam check, then abusive-language check (warns → auto-mute in
    groups after `WARN_LIMIT` warnings). Both configurable in `config.py`.
