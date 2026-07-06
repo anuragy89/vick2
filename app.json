@@ -1,0 +1,52 @@
+{
+  "name": "Vick 2.0 Telegram Bot",
+  "description": "Human-like, mood-adaptive Telegram chat bot. MongoDB-driven replies with light AI (Groq) flavor, moderation, and owner broadcast/stats.",
+  "keywords": ["telegram", "bot", "mongodb", "groq", "chatbot"],
+  "stack": "container",
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "standard-2x"
+    }
+  },
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram bot token from @BotFather",
+      "required": true
+    },
+    "OWNER_ID": {
+      "description": "Your numeric Telegram user ID (for /broadcast and /stats access)",
+      "required": true
+    },
+    "GROQ_API_KEY": {
+      "description": "Free API key from https://console.groq.com/keys",
+      "required": true
+    },
+    "GROQ_MODEL": {
+      "description": "Groq model name",
+      "value": "llama-3.3-70b-versatile",
+      "required": false
+    },
+    "MONGO_URI": {
+      "description": "MongoDB Atlas connection string",
+      "required": true
+    },
+    "MONGO_DB_NAME": {
+      "description": "MongoDB database name",
+      "value": "vick2bot",
+      "required": false
+    },
+    "SUPPORT_GROUP_URL": {
+      "description": "Telegram support group link shown in /start buttons",
+      "required": false
+    },
+    "CHANNEL_URL": {
+      "description": "Telegram channel link shown in /start buttons",
+      "required": false
+    },
+    "BOT_USERNAME": {
+      "description": "Bot's Telegram username, without the @",
+      "required": true
+    }
+  }
+}
