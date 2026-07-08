@@ -20,7 +20,8 @@ import db
 import ai_engine
 import matcher
 import moderation
-from moods import mood_emoji, maybe_sticker
+import sticker_store
+from moods import mood_emoji, maybe_sticker, any_sticker
 from keyboards import start_keyboard, back_keyboard
 from broadcast import run_broadcast
 
@@ -157,30 +158,58 @@ STICKER_REPLIES = [
 async def sticker_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
+    sticker = update.message.sticker
 
     if chat.type != "private":
         await db.upsert_chat(chat.id, chat.type, chat.title)
 
     if user.id == config.OWNER_ID:
-        fid = update.message.sticker.file_id
-        await update.message.reply_text(f"file_id:\n`{fid}`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(f"file_id:\n`{sticker.file_id}`", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if chat.type != "private":
+        bot_username = context.bot.username
+        if not _should_respond_in_group(update, bot_username):
+            return
+
+    # try to learn this sticker for future reuse (skipped if pack name/title
+    # matches the blocked-keyword filter - see sticker_store.py for details
+    # and its honest limitation notice)
+    guessed_mood = sticker_store._guess_mood(sticker.emoji or "")
+    try:
+        await sticker_store.learn_sticker(context.bot, sticker.file_id, sticker.set_name, sticker.emoji)
+    except Exception:
+        logger.exception("Sticker learning failed, continuing without it")
+
+    reply_sticker_id = await sticker_store.get_sticker(guessed_mood)
+    if reply_sticker_id:
+        await update.message.reply_sticker(reply_sticker_id)
     else:
-        await update.message.reply_text(random.choice(STICKER_REPLIES))
+        # first sticker ever seen for this mood / pool still empty ->
+        # echo the same one back so the reply is still a sticker
+        await update.message.reply_sticker(sticker.file_id)
 
 
 # ---------------------------------------------------------------------------
 # Group mention/reply gate
 # ---------------------------------------------------------------------------
 def _should_respond_in_group(update: Update, bot_username: str) -> bool:
-    if config.GROUP_REPLY_ALL:
-        return True
     msg = update.message
-    if msg.reply_to_message and msg.reply_to_message.from_user and \
-       msg.reply_to_message.from_user.username == bot_username:
-        return True
+
+    # explicit mention always wins - user clearly wants the bot's attention
     if msg.text and f"@{bot_username}".lower() in msg.text.lower():
         return True
-    return False
+
+    if msg.reply_to_message and msg.reply_to_message.from_user:
+        replied_to_bot = msg.reply_to_message.from_user.username == bot_username
+        if not replied_to_bot:
+            # this is a reply aimed at ANOTHER user (two people chatting via
+            # reply threads) - the bot should stay out of it entirely
+            return False
+        return True  # direct reply to the bot's own message - always respond
+
+    # plain message, not a reply to anyone - fall back to the configured mode
+    return config.GROUP_REPLY_ALL
 
 
 # ---------------------------------------------------------------------------
@@ -269,15 +298,21 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not reply:
             reply = canned_reply
     else:
-        # No mongo intent matched -> AI is now the primary source (per config),
-        # canned fallback is only a safety net if the AI call itself fails.
+        # No mongo intent/learned match -> AI is the source, but we save its
+        # answer to Mongo right after so the same message gets answered from
+        # Mongo (no AI call) next time. Canned fallback is only a safety net
+        # if the AI call itself fails.
+        used_ai = False
         try:
             reply = await ai_engine.generate_reply(text, mood)
+            used_ai = True
         except Exception:
             logger.exception("AI fallback call failed, using canned fallback instead")
         if not reply:
             fallback_options = await db.get_fallbacks(mood)
             reply = random.choice(fallback_options)
+        elif used_ai:
+            await matcher.learn(text, reply, mood)
 
     if not any(e in reply for e in ["😊", "😄", "😍", "😉", "😔", "😤", "🥰"]):
         if random.random() < 0.3:
@@ -286,6 +321,8 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
 
     sticker_id = maybe_sticker(mood)
+    if not sticker_id and random.random() < 0.3:
+        sticker_id = await sticker_store.get_sticker(mood)
     if sticker_id:
         await context.bot.send_sticker(chat.id, sticker_id)
 
