@@ -21,7 +21,7 @@ import ai_engine
 import matcher
 import moderation
 import sticker_store
-from moods import mood_emoji, maybe_sticker, any_sticker
+from moods import mood_emoji, maybe_sticker
 from keyboards import start_keyboard, back_keyboard
 from broadcast import run_broadcast
 
