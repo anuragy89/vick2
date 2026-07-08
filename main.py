@@ -312,7 +312,10 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fallback_options = await db.get_fallbacks(mood)
             reply = random.choice(fallback_options)
         elif used_ai:
-            await matcher.learn(text, reply, mood)
+            try:
+                await matcher.learn(text, reply, mood)
+            except Exception:
+                logger.exception("Failed to save learned reply, continuing anyway")
 
     if not any(e in reply for e in ["😊", "😄", "😍", "😉", "😔", "😤", "🥰"]):
         if random.random() < 0.3:
