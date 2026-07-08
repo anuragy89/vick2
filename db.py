@@ -17,6 +17,17 @@ intents = db["intents"]
 # fallbacks: generic mood-based replies when no intent matches.
 fallbacks = db["fallbacks"]
 
+# learned: AI-generated replies get saved here keyed by the exact message that
+# triggered them, so the next time someone sends the same message, Mongo
+# answers instantly instead of calling AI again. This is how the bot's
+# non-AI "brain" grows over time from real conversations.
+learned = db["learned"]
+
+# collected_stickers: stickers users send get saved here (after a basic
+# content-name filter) so the bot can reply with real stickers over time
+# instead of needing the owner to manually configure file_ids.
+collected_stickers = db["collected_stickers"]
+
 # badwords: editable moderation filter list.
 badwords = db["badwords"]
 
@@ -120,3 +131,49 @@ async def get_fallbacks(mood: str) -> list[str]:
 async def get_badwords() -> list[str]:
     cursor = badwords.find({})
     return [doc["word"] async for doc in cursor]
+
+
+# ---------------------------------------------------------------------------
+# Learned replies (AI answers saved for reuse - reduces future AI dependency)
+# ---------------------------------------------------------------------------
+async def get_all_learned() -> list[dict]:
+    cursor = learned.find({})
+    return [doc async for doc in cursor]
+
+
+async def save_learned(pattern: str, response: str, mood: str):
+    """Upserts by exact normalized message text. Keeps up to 5 varied AI
+    responses per pattern so repeated questions don't feel robotic/identical."""
+    await learned.update_one(
+        {"_id": pattern},
+        {
+            "$addToSet": {"responses": response},
+            "$set": {"mood": mood, "last_used": time.time()},
+            "$setOnInsert": {"created_at": time.time()},
+        },
+        upsert=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Collected stickers (auto-learned from users, filtered for safety)
+# ---------------------------------------------------------------------------
+async def get_all_stickers() -> list[dict]:
+    cursor = collected_stickers.find({})
+    return [doc async for doc in cursor]
+
+
+async def save_sticker(file_id: str, set_name: str, emoji: str, mood: str):
+    await collected_stickers.update_one(
+        {"_id": file_id},
+        {
+            "$set": {
+                "set_name": set_name,
+                "emoji": emoji,
+                "mood": mood,
+                "last_seen": time.time(),
+            },
+            "$setOnInsert": {"added_at": time.time()},
+        },
+        upsert=True,
+    )
