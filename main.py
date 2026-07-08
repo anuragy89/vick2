@@ -30,17 +30,31 @@ logging.basicConfig(
 logger = logging.getLogger("vick2")
 
 WELCOME_TEXT = (
-    "heyy 👋 main Vick hu~\n\n"
-    "bas normal insaan jaisi baat karti hu, mujhe kuch bhi bolo main reply karungi 😊\n"
-    "group me add karna ho ya kuch help chahiye, neeche buttons se dekh lo 👇"
+    "👋 *Welcome to Vick*\n\n"
+    "I'm an AI-powered chat companion, built to hold natural, adaptive conversations — "
+    "whether you're catching up, looking for company, or just want to chat.\n\n"
+    "🔹 *What I offer*\n"
+    "💬 Natural, free-flowing conversation\n"
+    "🎭 Tone that adapts to the mood of the chat\n"
+    "👥 Works in both private chats and groups\n\n"
+    "Use the buttons below to explore, or just send a message to get started."
 )
 
 HELP_TEXT = (
-    "🆘 *Help*\n\n"
-    "• Bas mujhe message karo, main reply karungi jaise ek normal ladki karti hai.\n"
-    "• Group me add karke bhi mujhse baat kar sakte ho — bas mujhe *mention* ya *reply* karo.\n"
-    "• Abusive language ya spam allowed nahi hai, warnings ke baad mute ho sakte ho.\n"
-    "• Koi issue ho to Support group join karo.\n"
+    "📖 *Help & Information*\n\n"
+    "*In a private chat*\n"
+    "💬 Message me anytime — no commands needed.\n\n"
+    "*In a group*\n"
+    "👥 Add me as a member and I'll take part in the conversation naturally.\n\n"
+    "*Community guidelines*\n"
+    "🚫 Abusive language or spam isn't tolerated — repeated violations result in a "
+    "temporary mute.\n\n"
+    "Have a question or ran into an issue? Reach out via the Support button below."
+)
+
+GROUP_WELCOME_TEXT = (
+    "👋 *Hi everyone, Vick here!*\n\n"
+    "Thanks for adding me — feel free to chat, I'll join the conversation naturally 💬"
 )
 
 
@@ -53,10 +67,12 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if chat.type == "private":
         await db.upsert_user(user.id, user.first_name, user.username)
-        await update.message.reply_text(WELCOME_TEXT, reply_markup=start_keyboard())
+        await update.message.reply_text(
+            WELCOME_TEXT, parse_mode=ParseMode.MARKDOWN, reply_markup=start_keyboard()
+        )
     else:
         await db.upsert_chat(chat.id, chat.type, chat.title)
-        await update.message.reply_text("heyy! main Vick 😊 mujhe mention/reply karke baat karo yahan.")
+        await update.message.reply_text(GROUP_WELCOME_TEXT, parse_mode=ParseMode.MARKDOWN)
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,19 +145,35 @@ async def button_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 # Sticker handler (also doubles as owner's file_id grabber)
 # ---------------------------------------------------------------------------
+STICKER_REPLIES = [
+    "haha nice sticker 😄",
+    "hahaha 😂",
+    "yeh to cute hai 🥰",
+    "lol 😆",
+    "haha same energy 😄",
+]
+
+
 async def sticker_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    chat = update.effective_chat
+
+    if chat.type != "private":
+        await db.upsert_chat(chat.id, chat.type, chat.title)
+
     if user.id == config.OWNER_ID:
         fid = update.message.sticker.file_id
         await update.message.reply_text(f"file_id:\n`{fid}`", parse_mode=ParseMode.MARKDOWN)
     else:
-        await update.message.reply_text("haha nice sticker 😄")
+        await update.message.reply_text(random.choice(STICKER_REPLIES))
 
 
 # ---------------------------------------------------------------------------
 # Group mention/reply gate
 # ---------------------------------------------------------------------------
 def _should_respond_in_group(update: Update, bot_username: str) -> bool:
+    if config.GROUP_REPLY_ALL:
+        return True
     msg = update.message
     if msg.reply_to_message and msg.reply_to_message.from_user and \
        msg.reply_to_message.from_user.username == bot_username:
@@ -233,15 +265,16 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 reply = await ai_engine.generate_reply(text, mood)
             except Exception:
-                logger.warning("AI flavor call failed, using canned reply instead")
+                logger.exception("AI flavor call failed, using canned reply instead")
         if not reply:
             reply = canned_reply
     else:
-        if random.random() < config.AI_FALLBACK_CHANCE:
-            try:
-                reply = await ai_engine.generate_reply(text, mood)
-            except Exception:
-                logger.warning("AI fallback call failed, using canned fallback instead")
+        # No mongo intent matched -> AI is now the primary source (per config),
+        # canned fallback is only a safety net if the AI call itself fails.
+        try:
+            reply = await ai_engine.generate_reply(text, mood)
+        except Exception:
+            logger.exception("AI fallback call failed, using canned fallback instead")
         if not reply:
             fallback_options = await db.get_fallbacks(mood)
             reply = random.choice(fallback_options)
