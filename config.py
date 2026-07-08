@@ -7,7 +7,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# llama-3.3-70b-versatile was deprecated by Groq (June 2026) - using its
+# recommended replacement. If Groq deprecates this one too in the future,
+# just update this one line (or the GROQ_MODEL env var) - nothing else
+# needs to change.
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 MONGO_URI = os.getenv("MONGO_URI")
@@ -17,14 +21,22 @@ SUPPORT_GROUP_URL = os.getenv("SUPPORT_GROUP_URL", "https://t.me/")
 CHANNEL_URL = os.getenv("CHANNEL_URL", "https://t.me/")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "your_bot")
 
-# ---- AI usage ratios (keep AI as a minority, not the main brain) ----
-AI_FALLBACK_CHANCE = 0.5   # when NO mongo intent matches, chance to call AI vs canned fallback
+# ---- Group behavior ----
+# True: bot replies to EVERY message in a group (needs privacy mode OFF via
+#       BotFather -> /setprivacy -> Disable, otherwise Telegram won't even
+#       deliver plain messages to the bot in the first place).
+# False: bot only replies when mentioned or replied to.
+GROUP_REPLY_ALL = os.getenv("GROUP_REPLY_ALL", "true").lower() == "true"
+
+# ---- AI usage ----
+# When NO mongo intent matches, AI is now the primary fallback (always tried
+# first) - the canned fallback text is only used if the AI call itself fails.
 AI_FLAVOR_CHANCE = 0.12    # when an intent DOES match, small chance to use AI instead for variety
 
 # ---- Moderation ----
-SPAM_WINDOW_SECONDS = 4      # time window
-SPAM_MAX_MESSAGES = 5        # max messages allowed within window before flagged as flood
-WARN_LIMIT = 3                # warnings before auto-mute (group only)
+SPAM_WINDOW_SECONDS = 4
+SPAM_MAX_MESSAGES = 8        # a bit higher since group-wide replies mean more traffic
+WARN_LIMIT = 3
 MUTE_MINUTES = 10
 
 # how often the intent cache refreshes from Mongo (seconds)
